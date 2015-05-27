@@ -137,6 +137,11 @@ function description(msg)
         description.replaceChild(span, description.firstChild);
     else
         description.appendChild(span);
+
+    if (window.location.href.indexOf('?bufferLog=0') >= 0) {
+        _bufferedConsoleLogs = null;
+    }
+
     if (_jsTestPreVerboseLogging) {
         _bufferedLogToConsole(msg);
     }
