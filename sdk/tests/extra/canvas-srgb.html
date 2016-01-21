@@ -1,0 +1,305 @@
+<html>
+<head>
+<title>Canvas SRGB test</title>
+<style>
+body {
+  background-color: #aaa;
+}
+canvas {
+  display: block;
+  margin: 1px;
+}
+#linearGradient {
+background: rgba(0,0,0,1);
+background: -moz-linear-gradient(left, rgba(0,0,0,1) 0%, rgba(255,255,255,1) 100%);
+background: -webkit-gradient(left top, right top, color-stop(0%, rgba(0,0,0,1)), color-stop(100%, rgba(255,255,255,1)));
+background: -webkit-linear-gradient(left, rgba(0,0,0,1) 0%, rgba(255,255,255,1) 100%);
+background: -o-linear-gradient(left, rgba(0,0,0,1) 0%, rgba(255,255,255,1) 100%);
+background: -ms-linear-gradient(left, rgba(0,0,0,1) 0%, rgba(255,255,255,1) 100%);
+background: linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(255,255,255,1) 100%);
+}
+h3 {
+  color: #555;
+}
+#console {
+  display: none;
+}
+</style>
+<script src="../js/js-test-pre.js"></script>
+<script src="../js/webgl-test-utils.js"></script>
+<script>
+var wtu = WebGLTestUtils;
+
+var linearToSrgbShaderFunction = [
+'vec3 linearToSrgb(vec3 colorRGB, float gammaCorrection)',
+'{',
+'    vec3 clampedColorRGB = clamp(colorRGB, 0.0, 1.0);',
+'    return mix(',
+'        pow(clampedColorRGB, vec3(gammaCorrection)) * 1.055 - 0.055,',
+'        clampedColorRGB * 12.92,',
+'        vec3(lessThan(clampedColorRGB, vec3(0.0031308))));',
+'}'
+].join('\n');
+
+var linearToSrgb = function(c) {
+    if (c < 0.0031308) {
+        return 12.92 * c;
+    } else {
+        return 1.055 * Math.pow(c, 1/2.4) - 0.055;
+    }
+};
+
+var srgbToLinear = function(c) {
+    if (c < 0.04045) {
+        return c / 12.92;
+    } else {
+        return Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+};
+
+var greyFillStyle = function(c) {
+    var byteColor = Math.round(c * 255);
+    var rgbString = [byteColor, byteColor, byteColor].join(', ');
+    return 'rgb(' + rgbString + ')';
+};
+
+var appendH3 = function(str) {
+    var element = document.createElement('h3');
+    element.textContent = str;
+    document.body.appendChild(element);
+};
+
+var appendParagraph = function(str) {
+    var element = document.createElement('p');
+    element.textContent = str;
+    document.body.appendChild(element);
+};
+
+var createLinearGradient = function() {
+    appendH3('CSS linear gradient');
+    var div = document.createElement('div');
+    div.id = 'linearGradient';
+    div.style.width = 256;
+    div.style.height = 50;
+    document.body.appendChild(div);
+}
+
+var createCanvas2D = function(name) {
+    appendH3(name);
+
+    var canvas2D = document.createElement('canvas');
+    var ctx = canvas2D.getContext('2d');
+    ctx.canvas.width = 256;
+    ctx.canvas.height = 50;
+    document.body.appendChild(canvas2D);
+    return ctx;
+};
+
+var createCanvasWebGLVersion = function(glVersion) {
+    var canvasGL = document.createElement('canvas');
+    canvasGL.width = 256;
+    canvasGL.height = 50;
+    var gl = wtu.create3DContext(canvasGL, {premultipliedAlpha: false, antialias: false, preserveDrawingBuffer: true}, glVersion);
+    if (gl) {
+        document.body.appendChild(canvasGL);
+    } else {
+        appendParagraph('Could not create WebGL context');
+    }
+    return gl;
+};
+
+var createCanvasWebGL = function(name) {
+    appendH3(name);
+    return createCanvasWebGLVersion(1);
+};
+
+var createCanvasWebGL2 = function(name) {
+    appendH3(name);
+    return createCanvasWebGLVersion(2);
+};
+
+var renderGradientPutImageDataLinear = function() {
+    var ctx = createCanvas2D('2D, putImageData, linear');
+    var data = ctx.createImageData(256, ctx.canvas.height);
+    for (var x = 0; x < 256; ++x) {
+        for (var y = 0; y < ctx.canvas.height; ++y) {
+            data.data[(y * 256 + x) * 4] = x;
+            data.data[(y * 256 + x) * 4 + 1] = x;
+            data.data[(y * 256 + x) * 4 + 2] = x;
+            data.data[(y * 256 + x) * 4 + 3] = 255;
+        }
+    }
+    ctx.putImageData(data, 0, 0);
+};
+
+var renderGradientPutImageDataSRGB = function() {
+    var ctx = createCanvas2D('2D, putImageData, SRGB');
+    var data = ctx.createImageData(256, ctx.canvas.height);
+    for (var x = 0; x < 256; ++x) {
+        for (var y = 0; y < ctx.canvas.height; ++y) {
+            var c = Math.round(linearToSrgb(x / 255) * 255);
+            data.data[(y * 256 + x) * 4] = c;
+            data.data[(y * 256 + x) * 4 + 1] = c;
+            data.data[(y * 256 + x) * 4 + 2] = c;
+            data.data[(y * 256 + x) * 4 + 3] = 255;
+        }
+    }
+    ctx.putImageData(data, 0, 0);
+};
+
+var renderGradientPutImageDataAssumeSRGB = function() {
+};
+
+var renderGradientFillRectFillStyleLinear = function() {
+    var ctx = createCanvas2D('2D, fillRect with fillStyle, linear');
+    for (var x = 0; x < 256; ++x) {
+        ctx.fillStyle = greyFillStyle(x / 255);
+        ctx.fillRect(x, 0, 1, ctx.canvas.height);
+    }
+};
+
+var renderGradientFillRectFillStyleSRGB = function() {
+    var ctx = createCanvas2D('2D, fillRect with fillStyle, SRGB');
+    for (var x = 0; x < 256; ++x) {
+        ctx.fillStyle = greyFillStyle(linearToSrgb(x / 255));
+        ctx.fillRect(x, 0, 1, ctx.canvas.height);
+    }
+};
+
+var renderGradientFillRectGlobalAlphaLinear = function() {
+    var ctx = createCanvas2D('2D, white fillRect on black with globalAlpha, linear alpha ramp');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.fillStyle = '#fff';
+    for (var x = 0; x < 256; ++x) {
+        ctx.globalAlpha = (x / 256);
+        ctx.fillRect(x, 0, 1, ctx.canvas.height);
+    }
+};
+
+var renderGradientFillRectGlobalAlphaSRGB = function() {
+    var ctx = createCanvas2D('2D, white fillRect on black with globalAlpha, hacky gamma-converted alpha ramp');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.fillStyle = '#fff';
+    for (var x = 0; x < 256; ++x) {
+        // An "SRGB" alpha value doesn't actually seem to make sense, but use it anyway
+        ctx.globalAlpha = linearToSrgb(x / 256);
+        ctx.fillRect(x, 0, 1, ctx.canvas.height);
+    }
+};
+
+var renderGradientWebGLShaderLinear = function() {
+    var gl = createCanvasWebGL('WebGL 1, shader, linear');
+    if (gl) {
+        wtu.setupProgram(gl, [
+            wtu.simpleTextureVertexShader,
+            [
+                'precision mediump float;',
+                'varying vec2 texCoord;',
+                'void main() {',
+                '    float g = texCoord.x;',
+                '    gl_FragColor = vec4(g, g, g, 1.0);',
+                '}'
+            ].join('\n')
+        ]);
+        wtu.setupUnitQuad(gl);
+        wtu.clearAndDrawUnitQuad(gl, [0, 0, 0, 0]);
+    }
+};
+
+var renderGradientWebGLShaderSRGB = function() {
+    var gl = createCanvasWebGL('WebGL 1, shader, SRGB conversion in shader');
+    if (gl) {
+        wtu.setupProgram(gl, [
+            wtu.simpleTextureVertexShader,
+            [
+                'precision mediump float;',
+                linearToSrgbShaderFunction,
+                'varying vec2 texCoord;',
+                'void main() {',
+                '    float g = texCoord.x;',
+                '    gl_FragColor = vec4(linearToSrgb(vec3(g, g, g), 1.0 / 2.4), 1.0);',
+                '}'
+            ].join('\n')
+        ]);
+        wtu.setupUnitQuad(gl);
+        wtu.clearAndDrawUnitQuad(gl, [0, 0, 0, 0]);
+    }
+};
+
+var renderGradientWebGL2ShaderLinear = function() {
+    var gl = createCanvasWebGL2('WebGL 2, shader, linear');
+    if (gl) {
+        wtu.setupProgram(gl, [
+            wtu.simpleTextureVertexShader,
+            [
+                'precision mediump float;',
+                'varying vec2 texCoord;',
+                'void main() {',
+                '    float g = texCoord.x;',
+                '    gl_FragColor = vec4(g, g, g, 1.0);',
+                '}'
+            ].join('\n')
+        ]);
+        wtu.setupUnitQuad(gl);
+        wtu.clearAndDrawUnitQuad(gl, [0, 0, 0, 0]);
+    }
+};
+
+var renderTestPatternTop = function(ctx) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.fillStyle = '#fff';
+    for (var x = 0; x < 256; ++x) {
+        for (var y = 0; y < ctx.canvas.height / 2; ++y) {
+            if ((x + y) % 2 == 0) {
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+};
+
+var renderTestPatternFillRectFillStyleSRGB = function() {
+    var ctx = createCanvas2D('2D, Black/white dither pattern on top. SRGB 50% grey fillRect on bottom');
+    renderTestPatternTop(ctx);
+    ctx.fillStyle = greyFillStyle(linearToSrgb(0.5));
+    ctx.fillRect(0, ctx.canvas.height * 0.5, 256, ctx.canvas.height * 0.5);
+};
+
+var renderTestPatternFillRectGlobalAlphaLinear = function() {
+    var ctx = createCanvas2D('2D, Black/white dither pattern on top. White blended on black with 50% globalAlpha on bottom');
+    renderTestPatternTop(ctx);
+    ctx.fillStyle = '#fff';
+    ctx.globalAlpha = 0.5;
+    ctx.fillRect(0, ctx.canvas.height * 0.5, 256, ctx.canvas.height * 0.5);
+};
+
+var start = function() {
+    createLinearGradient();
+    renderGradientPutImageDataLinear();
+    renderGradientFillRectFillStyleLinear();
+    renderGradientFillRectGlobalAlphaLinear();
+    renderGradientPutImageDataSRGB();
+    renderGradientFillRectFillStyleSRGB();
+    //renderGradientFillRectGlobalAlphaSRGB();
+    renderGradientWebGLShaderLinear();
+    renderGradientWebGL2ShaderLinear();
+    renderGradientWebGLShaderSRGB();
+    renderTestPatternFillRectFillStyleSRGB();
+    renderTestPatternFillRectGlobalAlphaLinear();
+};
+
+</script>
+</head>
+<body onload="start()">
+<div id="console"></div>
+<div>
+<h1>Canvas SRGB test</h1>
+<p>This page renders a set of test patterns, mostly gradients with linearly changing source color values, applying different conversions to the source color values.</p>
+<p>The page is meant to demonstrate how the display pipeline from JavaScript all the way to physical pixels handles greyscale colors. The expected results are based on CSS spec mentioning that colors are SRGB.</p>
+<p>Tests marked as <b>linear</b>: source color values are supplied directly to the rendering API. Expected result of displaying a gradient on screen: somewhat perceptually uniform gradient.</p>
+<p>Tests marked as <b>SRGB</b>: source color values are converted to SRGB before supplying them to the rendering API. Expected result of displaying a gradient on screen: linear gradient when measured as nits.</p>
+</div>
+</body>
+</html>
